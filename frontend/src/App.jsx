@@ -3,13 +3,14 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { ArrowRight, CalendarDays, ChevronDown, Compass, GraduationCap, LayoutDashboard, LogOut, Menu, Plus, ShieldCheck, Sparkles, Sun, TrendingUp, Wallet, X } from 'lucide-react';
 
 const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const nav = [{ id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'goals', label: 'Goals', icon: Compass }, { id: 'activity', label: 'Activity', icon: CalendarDays }];
 const icons = { sun: Sun, shield: ShieldCheck, book: GraduationCap };
 
 let authToken = '';
 async function api(path, options = {}) {
   const headers = { ...options.headers, ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) };
-  const response = await fetch(`/api${path}`, { ...options, headers });
+  const response = await fetch(`${apiBaseUrl}/api${path}`, { ...options, headers });
   if (!response.ok) {
     let detail = 'Something went wrong. Please try again.';
     try { const body = await response.json(); if (typeof body.detail === 'string') detail = body.detail; } catch { /* keep default */ }
@@ -133,7 +134,16 @@ function Dashboard({ session, onLogout }) {
           {tab === 'goals' && <><div className="toolbar"><div><h2>Plan for what matters</h2><p>Choose a goal to change its monthly contribution or target date.</p></div><label className="select-wrap"><span className="sr-only">Goal category</span><select value={category} onChange={e => setCategory(e.target.value)}><option value="all">All goals</option><option value="retirement">Retirement</option><option value="savings">Savings</option><option value="education">Education</option></select><ChevronDown size={16}/></label></div><div className="goals-grid">{goals.map(goal => <GoalCard key={goal.id} goal={goal} onEdit={setEditing}/>)}</div>{!goals.length && <div className="empty">No goals in this category.</div>}</>}
           {tab === 'activity' && <><div className="toolbar activity-toolbar"><div><h2>Contributions & transfers</h2><p>Choose a date range to review your plan activity.</p></div><div className="date-range"><label>From <input aria-label="From date" type="date" value={start} onChange={e => setStart(e.target.value)}/></label><label>To <input aria-label="To date" type="date" value={end} onChange={e => setEnd(e.target.value)}/></label></div></div><section className="panel activity-panel"><div className="activity-head"><span>ACTIVITY</span><span>AMOUNT</span></div>{activity.map(item => <div className="activity-row" key={item.id}><span className="activity-icon"><ArrowRight size={18}/></span><div><strong>{item.title}</strong><span>{new Date(`${item.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {item.category}</span></div><strong className="activity-amount">+{money(item.amount)}</strong></div>)}{!activity.length && <div className="empty">No activity in this date range. Try different dates.</div>}</section></>}
         </>}
-        <footer>Harbor is a fictional portfolio project. All people and figures are sample data.</footer>
+        <section className="panel" aria-labelledby="embedded-guide-title">
+          <div className="section-head"><div><p className="eyebrow">EMBEDDED RESOURCE</p><h2 id="embedded-guide-title">Financial wellness note</h2></div></div>
+          <iframe
+            title="Financial wellness note"
+            sandbox=""
+            style={{ width: '100%', height: 150, border: 0, borderRadius: 6, background: '#f5f8f9' }}
+            srcDoc={`<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;padding:18px;font:15px/1.5 Arial,sans-serif;color:#183043}h1{font-size:18px;margin:0 0 8px}p{margin:0}</style></head><body><h1>A small step counts</h1><p>Review one recent expense and decide whether it still supports a goal that matters to you.</p></body></html>`}
+          />
+        </section>
+        <footer>Harbor is a fictional portfolio project. All people and figures are sample data. <a href="https://www.consumerfinance.gov/consumer-tools/financial-well-being/" target="_blank" rel="noopener noreferrer" aria-label="Financial well-being resources (opens in a new tab)" style={{ color: 'inherit' }}>Financial well-being resources</a> <button type="button" className="text-action" onClick={() => window.alert('This is a sample browser alert.')}>Show alert</button></footer>
       </main>
     </div>
     {editing && <GoalDialog key={editing.id} goal={editing} onClose={() => setEditing(null)} onSaved={savedGoal}/>} 
