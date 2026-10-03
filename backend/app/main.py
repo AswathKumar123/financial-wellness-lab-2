@@ -6,7 +6,7 @@ from threading import Lock
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ app.add_middleware(
         if origin.strip()
     ],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -74,6 +74,16 @@ class LoginRequest(BaseModel):
 class GoalUpdate(BaseModel):
     monthlyContribution: int = Field(ge=0, le=100000)
     targetDate: date
+
+
+class GoalData(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+    category: Literal["retirement", "savings", "education"]
+    current: int = Field(ge=0)
+    target: int = Field(gt=0)
+    monthlyContribution: int = Field(ge=0, le=100000)
+    targetDate: date
+    icon: Literal["sun", "shield", "book"]
 
 
 def current_user(authorization: Annotated[str | None, Header()] = None):
@@ -143,6 +153,25 @@ def list_goals(category: Literal["all", "retirement", "savings", "education"] = 
     return [goal for goal in goals if category == "all" or goal["category"] == category]
 
 
+@app.post("/api/goals", status_code=status.HTTP_201_CREATED)
+def create_goal(goal: GoalData, user=Depends(current_user)):
+    created = {"id": uuid4().hex, **goal.model_dump(mode="json")}
+    with LOCK:
+        user["goals"].append(created)
+    return deepcopy(created)
+
+
+@app.put("/api/goals/{goal_id}")
+def replace_goal(goal_id: str, update: GoalData, user=Depends(current_user)):
+    with LOCK:
+        for index, goal in enumerate(user["goals"]):
+            if goal["id"] == goal_id:
+                replaced = {"id": goal_id, **update.model_dump(mode="json")}
+                user["goals"][index] = replaced
+                return deepcopy(replaced)
+    raise HTTPException(status_code=404, detail="Goal not found")
+
+
 @app.patch("/api/goals/{goal_id}")
 def update_goal(goal_id: str, update: GoalUpdate, user=Depends(current_user)):
     with LOCK:
@@ -153,16 +182,28 @@ def update_goal(goal_id: str, update: GoalUpdate, user=Depends(current_user)):
     raise HTTPException(status_code=404, detail="Goal not found")
 
 
+@app.delete("/api/goals/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_goal(goal_id: str, user=Depends(current_user)):
+    with LOCK:
+        for index, goal in enumerate(user["goals"]):
+            if goal["id"] == goal_id:
+                del user["goals"][index]
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
+    raise HTTPException(status_code=404, detail="Goal not found")
+
+
 @app.get("/api/recommendations")
 def recommendations(priority: Literal["all", "high", "medium"] = "all", user=Depends(current_user)):
     with LOCK:
-        emergency = deepcopy(next(goal for goal in user["goals"] if goal["id"] == "emergency"))
-    items = [
-        {"id": "emergency", "priority": "high", "eyebrow": "Build your safety net", "title": "Close the gap in your emergency fund", "description": f"You are {round(emergency['current'] / emergency['target'] * 100)}% of the way to your goal. Review your monthly contribution to get there sooner.", "actionGoalId": "emergency"},
+        goals = deepcopy(user["goals"])
+    goals_by_id = {goal["id"]: goal for goal in goals}
+    items = ([
+        {"id": "emergency", "priority": "high", "eyebrow": "Build your safety net", "title": "Close the gap in your emergency fund", "description": f"You are {round(goals_by_id['emergency']['current'] / goals_by_id['emergency']['target'] * 100)}% of the way to your goal. Review your monthly contribution to get there sooner.", "actionGoalId": "emergency"},
+    ] if "emergency" in goals_by_id else []) + [
         {"id": "retirement", "priority": "medium", "eyebrow": "Plan ahead", "title": "Review your retirement contributions", "description": "A small increase now can make a meaningful difference over time.", "actionGoalId": "retirement"},
         {"id": "college", "priority": "medium", "eyebrow": "Keep momentum", "title": "Check your college savings timeline", "description": "See how your current contribution lines up with your target date.", "actionGoalId": "college"},
     ]
-    return [item for item in items if priority == "all" or item["priority"] == priority]
+    return [item for item in items if item["actionGoalId"] in goals_by_id and (priority == "all" or item["priority"] == priority)]
 
 
 @app.get("/api/activity")
