@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowRight, CalendarDays, ChevronDown, Compass, GraduationCap, LayoutDashboard, LogOut, Menu, Plus, ShieldCheck, Sparkles, Sun, TrendingUp, Wallet, X } from 'lucide-react';
+import { ArrowRight, CalendarDays, ChevronDown, Compass, GraduationCap, LayoutDashboard, LogOut, Menu, Plus, ShieldCheck, Sparkles, Sun, Trash2, TrendingUp, Wallet, X } from 'lucide-react';
 
 const money = value => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -19,11 +19,11 @@ async function api(path, options = {}) {
   return response.json();
 }
 
-function GoalCard({ goal, onEdit }) {
+function GoalCard({ goal, onEdit, onDelete }) {
   const Icon = icons[goal.icon] || Compass;
   const percent = Math.min(100, Math.round(goal.current / goal.target * 100));
   return <article className="goal-card" data-testid={`goal-${goal.id}`}>
-    <div className="goal-card-head"><span className={`goal-icon ${goal.icon}`}><Icon size={22} strokeWidth={1.8}/></span><button className="quiet-link" onClick={() => onEdit(goal)}>Manage <ArrowRight size={16}/></button></div>
+    <div className="goal-card-head"><span className={`goal-icon ${goal.icon}`}><Icon size={22} strokeWidth={1.8}/></span><div><button className="quiet-link" onClick={() => onEdit(goal)}>Manage <ArrowRight size={16}/></button><button className="icon-button goal-delete" aria-label={`Delete ${goal.title}`} title={`Delete ${goal.title}`} onClick={() => onDelete(goal)}><Trash2 size={16}/></button></div></div>
     <h3>{goal.title}</h3><div className="goal-amount">{money(goal.current)} <span>of {money(goal.target)}</span></div>
     <div className="progress" role="progressbar" aria-label={`${goal.title} progress`} aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percent}%` }}/></div>
     <div className="goal-foot"><span>{percent}% complete</span><span>{money(goal.monthlyContribution)}/mo</span></div>
@@ -31,27 +31,36 @@ function GoalCard({ goal, onEdit }) {
 }
 
 function GoalDialog({ goal, onClose, onSaved }) {
-  const [monthlyContribution, setContribution] = useState(goal.monthlyContribution);
-  const [targetDate, setTargetDate] = useState(goal.targetDate);
+  const [title, setTitle] = useState(goal?.title || '');
+  const [category, setCategory] = useState(goal?.category || 'savings');
+  const [current, setCurrent] = useState(goal?.current ?? 0);
+  const [target, setTarget] = useState(goal?.target ?? 10000);
+  const [monthlyContribution, setContribution] = useState(goal?.monthlyContribution ?? 0);
+  const [targetDate, setTargetDate] = useState(goal?.targetDate || '2030-01-01');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => { const handler = e => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler); }, [onClose]);
   async function submit(event) {
     event.preventDefault(); setSaving(true); setError('');
     try {
-      const saved = await api(`/goals/${goal.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monthlyContribution: Number(monthlyContribution), targetDate }) });
-      onSaved(saved);
+      const goalData = { title: title.trim(), category, current: Number(current), target: Number(target), monthlyContribution: Number(monthlyContribution), targetDate, icon: category === 'retirement' ? 'sun' : category === 'education' ? 'book' : 'shield' };
+      const saved = await api(goal ? `/goals/${goal.id}` : '/goals', { method: goal ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(goalData) });
+      onSaved(saved, !goal);
     } catch (e) { setError(e.message); } finally { setSaving(false); }
   }
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
     <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-      <div className="dialog-head"><span className="eyebrow">EDIT GOAL</span><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={20}/></button></div>
-      <h2 id="dialog-title">{goal.title}</h2><p>Adjust your plan as life changes. Your saved updates will appear on the dashboard.</p>
+      <div className="dialog-head"><span className="eyebrow">{goal ? 'EDIT GOAL' : 'NEW GOAL'}</span><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={20}/></button></div>
+      <h2 id="dialog-title">{goal?.title || 'Create a goal'}</h2><p>Set a target and contribution for a milestone that matters to you.</p>
       <form onSubmit={submit}>
+        <label htmlFor="goal-title">Goal name</label><input id="goal-title" type="text" maxLength="80" required value={title} onChange={e => setTitle(e.target.value)}/>
+        <label htmlFor="goal-category">Category</label><select id="goal-category" value={category} onChange={e => setCategory(e.target.value)}><option value="retirement">Retirement</option><option value="savings">Savings</option><option value="education">Education</option></select>
+        <label htmlFor="goal-current">Saved so far</label><div className="input-prefix"><span>$</span><input id="goal-current" type="number" min="0" step="1" required value={current} onChange={e => setCurrent(e.target.value)}/></div>
+        <label htmlFor="goal-target">Target amount</label><div className="input-prefix"><span>$</span><input id="goal-target" type="number" min="1" step="1" required value={target} onChange={e => setTarget(e.target.value)}/></div>
         <label htmlFor="contribution">Monthly contribution</label><div className="input-prefix"><span>$</span><input id="contribution" type="number" min="0" max="100000" required value={monthlyContribution} onChange={e => setContribution(e.target.value)}/></div>
         <label htmlFor="target-date">Target date</label><input id="target-date" type="date" required value={targetDate} onChange={e => setTargetDate(e.target.value)}/>
         {error && <p className="error" role="alert">{error}</p>}
-        <div className="dialog-actions"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button></div>
+        <div className="dialog-actions"><button type="button" className="button secondary" onClick={onClose}>Cancel</button><button className="button primary" disabled={saving}>{saving ? 'Saving…' : goal ? 'Save changes' : 'Create goal'}</button></div>
       </form>
     </section>
   </div>;
@@ -73,6 +82,7 @@ function Dashboard({ session, onLogout }) {
   const [recommendations, setRecommendations] = useState([]);
   const [activity, setActivity] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
@@ -102,9 +112,18 @@ function Dashboard({ session, onLogout }) {
     setOpenTabs(remaining);
     if (activeTabId === id) setActiveTabId(remaining[Math.min(index, remaining.length - 1)]?.id ?? null);
   }
-  async function savedGoal(saved) {
-    setEditing(null); setNotice(`${saved.title} updated successfully.`);
+  async function savedGoal(saved, created = false) {
+    setEditing(null); setCreating(false); setNotice(`${saved.title} ${created ? 'created' : 'updated'} successfully.`);
     try {
+      const [freshGoals, freshOverview, freshRecommendations] = await Promise.all([api(`/goals?category=${tab === 'goals' ? category : 'all'}`), api(`/overview?period=${period}`), api(`/recommendations?priority=${priority}`)]);
+      setGoals(freshGoals); setOverview(freshOverview); setRecommendations(freshRecommendations);
+    } catch (e) { setError(e.message); }
+  }
+  async function deleteGoal(goal) {
+    if (!window.confirm(`Delete ${goal.title}? This cannot be undone.`)) return;
+    try {
+      await api(`/goals/${goal.id}`, { method: 'DELETE' });
+      setNotice(`${goal.title} deleted successfully.`);
       const [freshGoals, freshOverview, freshRecommendations] = await Promise.all([api(`/goals?category=${tab === 'goals' ? category : 'all'}`), api(`/overview?period=${period}`), api(`/recommendations?priority=${priority}`)]);
       setGoals(freshGoals); setOverview(freshOverview); setRecommendations(freshRecommendations);
     } catch (e) { setError(e.message); }
@@ -129,9 +148,9 @@ function Dashboard({ session, onLogout }) {
             <div className="summary-grid"><article className="net-worth summary-card"><div className="card-top"><span>NET WORTH</span><Wallet size={20}/></div><strong>{money(overview.netWorth)}</strong><div className="change"><TrendingUp size={16}/> {overview.netWorthChangePercent}% <span>from last year</span></div></article><article className="summary-card"><div className="card-top"><span>MONTHLY INCOME</span><span className="small-badge income">↗</span></div><strong>{money(overview.monthlyIncome)}</strong><p>Money coming in</p></article><article className="summary-card"><div className="card-top"><span>MONTHLY EXPENSES</span><span className="small-badge expense">↗</span></div><strong>{money(overview.monthlyExpenses)}</strong><p>Money going out</p></article></div>
             <div className="overview-grid"><section className="panel chart-panel"><div className="section-head"><div><p className="eyebrow">CASH FLOW</p><h2>Income & expenses</h2></div><label className="select-wrap"><span className="sr-only">Chart period</span><select value={period} onChange={e => setPeriod(e.target.value)}><option value="12m">Last 12 months</option><option value="6m">Last 6 months</option></select><ChevronDown size={16}/></label></div><div className="chart-legend"><span><i className="income-dot"/>Income</span><span><i className="expense-dot"/>Expenses</span></div><div className="chart" role="img" aria-label={`Income and expenses over the last ${period === '12m' ? '12' : '6'} months`}><ResponsiveContainer width="100%" height="100%"><AreaChart data={overview.monthly} margin={{ top: 12, right: 10, left: -14, bottom: 0 }}><defs><linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#16a89d" stopOpacity={0.2}/><stop offset="100%" stopColor="#16a89d" stopOpacity={0}/></linearGradient></defs><CartesianGrid stroke="#e8edf0" vertical={false}/><XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: '#7a8894', fontSize: 12 }} dy={10}/><YAxis tickFormatter={v => `$${v / 1000}k`} tickLine={false} axisLine={false} tick={{ fill: '#7a8894', fontSize: 12 }}/><Tooltip formatter={value => money(value)} contentStyle={{ borderRadius: 10, border: '1px solid #dbe4e8' }}/><Area type="monotone" dataKey="income" name="Income" stroke="#119e97" strokeWidth={3} fill="url(#incomeFill)"/><Area type="monotone" dataKey="expenses" name="Expenses" stroke="#b6a286" strokeWidth={2.5} fill="transparent"/></AreaChart></ResponsiveContainer></div></section>
               <section className="panel recommendation-panel"><div className="section-head"><div><p className="eyebrow">NEXT BEST ACTION</p><h2>Ways to move forward</h2></div><span className="spark-icon"><Sparkles size={19}/></span></div><label className="inline-filter">Show <select value={priority} onChange={e => setPriority(e.target.value)} aria-label="Recommendation priority"><option value="all">All priorities</option><option value="high">High priority</option><option value="medium">Medium priority</option></select></label>{recommendations.length ? recommendations.map((item, index) => <div className="recommendation" key={item.id}><span className="recommendation-number">0{index + 1}</span><div><span className="recommendation-eyebrow">{item.eyebrow}</span><h3>{item.title}</h3><p>{item.description}</p><button className="text-action" onClick={() => { goTo('goals'); setCategory('all'); setNotice(`Find ${item.actionGoalId} below and select Manage to update it.`); }}>View goal <ArrowRight size={16}/></button></div></div>) : <p>No recommendations match this filter.</p>}</section></div>
-            <div className="section-title-row"><div><p className="eyebrow">LOOKING AHEAD</p><h2>Your goals</h2></div><button className="quiet-link" onClick={() => goTo('goals')}>View all goals <ArrowRight size={17}/></button></div><div className="goals-grid">{goals.map(goal => <GoalCard key={goal.id} goal={goal} onEdit={setEditing}/>)}</div>
+            <div className="section-title-row"><div><p className="eyebrow">LOOKING AHEAD</p><h2>Your goals</h2></div><button className="quiet-link" onClick={() => goTo('goals')}>View all goals <ArrowRight size={17}/></button></div><div className="goals-grid">{goals.map(goal => <GoalCard key={goal.id} goal={goal} onEdit={setEditing} onDelete={deleteGoal}/>)}</div>
           </>}
-          {tab === 'goals' && <><div className="toolbar"><div><h2>Plan for what matters</h2><p>Choose a goal to change its monthly contribution or target date.</p></div><label className="select-wrap"><span className="sr-only">Goal category</span><select value={category} onChange={e => setCategory(e.target.value)}><option value="all">All goals</option><option value="retirement">Retirement</option><option value="savings">Savings</option><option value="education">Education</option></select><ChevronDown size={16}/></label></div><div className="goals-grid">{goals.map(goal => <GoalCard key={goal.id} goal={goal} onEdit={setEditing}/>)}</div>{!goals.length && <div className="empty">No goals in this category.</div>}</>}
+          {tab === 'goals' && <><div className="toolbar"><div><h2>Plan for what matters</h2><p>Choose a goal to change its monthly contribution or target date.</p></div><div className="goal-toolbar-actions"><label className="select-wrap"><span className="sr-only">Goal category</span><select value={category} onChange={e => setCategory(e.target.value)}><option value="all">All goals</option><option value="retirement">Retirement</option><option value="savings">Savings</option><option value="education">Education</option></select><ChevronDown size={16}/></label><button className="button primary" onClick={() => setCreating(true)}><Plus size={16}/> Add goal</button></div></div><div className="goals-grid">{goals.map(goal => <GoalCard key={goal.id} goal={goal} onEdit={setEditing} onDelete={deleteGoal}/>)}</div>{!goals.length && <div className="empty">No goals in this category.</div>}</>}
           {tab === 'activity' && <><div className="toolbar activity-toolbar"><div><h2>Contributions & transfers</h2><p>Choose a date range to review your plan activity.</p></div><div className="date-range"><label>From <input aria-label="From date" type="date" value={start} onChange={e => setStart(e.target.value)}/></label><label>To <input aria-label="To date" type="date" value={end} onChange={e => setEnd(e.target.value)}/></label></div></div><section className="panel activity-panel"><div className="activity-head"><span>ACTIVITY</span><span>AMOUNT</span></div>{activity.map(item => <div className="activity-row" key={item.id}><span className="activity-icon"><ArrowRight size={18}/></span><div><strong>{item.title}</strong><span>{new Date(`${item.date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {item.category}</span></div><strong className="activity-amount">+{money(item.amount)}</strong></div>)}{!activity.length && <div className="empty">No activity in this date range. Try different dates.</div>}</section></>}
         </>}
         <section className="panel" aria-labelledby="embedded-guide-title">
@@ -146,7 +165,8 @@ function Dashboard({ session, onLogout }) {
         <footer>Harbor is a fictional portfolio project. All people and figures are sample data. <a href="https://www.consumerfinance.gov/consumer-tools/financial-well-being/" target="_blank" rel="noopener noreferrer" aria-label="Financial well-being resources (opens in a new tab)" style={{ color: 'inherit' }}>Financial well-being resources</a> <button type="button" className="text-action" onClick={() => window.alert('This is a sample browser alert.')}>Show alert</button></footer>
       </main>
     </div>
-    {editing && <GoalDialog key={editing.id} goal={editing} onClose={() => setEditing(null)} onSaved={savedGoal}/>} 
+    {editing && <GoalDialog key={editing.id} goal={editing} onClose={() => setEditing(null)} onSaved={savedGoal}/>}
+    {creating && <GoalDialog key="new-goal" onClose={() => setCreating(false)} onSaved={savedGoal}/>}
   </div>;
 }
 

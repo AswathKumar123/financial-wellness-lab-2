@@ -33,9 +33,9 @@ Open http://localhost:5173. Vite proxies `/api` to FastAPI on port 8000. Start b
 - Sign-in with 120 independent fictional accounts (`user001`–`user120`). Password for account `userNNN` is `DemoPass!NNN`, such as `DemoPass!001`. These are intentionally public demo credentials, not production authentication.
 - Open multiple workspace tabs from the side navigation or New tab dropdown. Tabs can be switched and closed, including duplicate views and an empty workspace.
 - Overview tab with net worth, income/expenses chart, 6/12 month dropdown, recommendations, and goal cards.
-- Goals tab with category dropdown and editable monthly contribution and target date.
+- Goals tab with category dropdown, goal creation, full edits, and deletion. Goal creation uses `POST /api/goals`, full edits use `PUT /api/goals/{id}`, and deletion uses `DELETE /api/goals/{id}`; `PATCH /api/goals/{id}` remains available for partial updates.
 - Activity tab with date range calendars and filtered activity.
-- FastAPI endpoints: `/api/health`, `/api/demo-users`, `POST /api/auth/login`, `POST /api/auth/logout`, `/api/profile`, `/api/overview`, `/api/goals`, `PATCH /api/goals/{id}`, `/api/recommendations`, `/api/activity`. Protected requests use `Authorization: Bearer <accessToken>`.
+- FastAPI endpoints: `/api/health`, `/api/demo-users`, `POST /api/auth/login`, `POST /api/auth/logout`, `/api/profile`, `/api/overview`, `GET/POST /api/goals`, `PUT/PATCH/DELETE /api/goals/{id}`, `/api/recommendations`, `/api/activity`. Protected requests use `Authorization: Bearer <accessToken>`.
 - Loading, empty, error, and save confirmation states; responsive layout.
 
 Goal updates and sessions are stored **in memory** and reset when the API restarts. Activity and charts are fictional fixtures. The date range deliberately covers sample entries in August and September 2026, so you can assert both populated and empty states. The sign-in flow is for local test practice, with predictable public credentials and no database. Do not deploy it as a real financial service.
@@ -43,7 +43,7 @@ Goal updates and sessions are stored **in memory** and reset when the API restar
 ## Suggested Playwright starting points
 
 1. Assert that Overview loads from the API, then switch the chart dropdown to six months.
-2. Filter Goals to Savings; edit Emergency fund; verify the updated monthly contribution in both Goals and Overview.
+2. Filter Goals to Savings; create a goal, edit Emergency fund, then delete the created goal and verify each result.
 3. Change Activity dates to an empty range and assert the empty state, then select a range containing a deposit.
 4. Intercept `/api/recommendations` or `/api/goals` to exercise error and loading states.
 5. Run the same flows at desktop and mobile viewport sizes, including the mobile menu.
